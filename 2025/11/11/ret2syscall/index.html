@@ -1,0 +1,703 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>ret2syscall | 欢迎来到我的知识分享平台 OvO</title><meta name="author" content="LimuR0"><meta name="copyright" content="LimuR0"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="tip:文章参考了多方资料，仅供自己学习 前置知识一. 操作系统知识操作系统将CPU分为：   用户态：运行普通程序，权限受限内核态：运行操作系统核心代码，有最高权限    其中：  用户态程序可以通过系统调用（syscall）向操作系统请求内核服务接口。（常见的 read 系统调用–用于从文件中读取数据， write 系统调用–用于向文件或标准输出写入数据。）     系统调用的流程：1.用户程">
+<meta property="og:type" content="article">
+<meta property="og:title" content="ret2syscall">
+<meta property="og:url" content="http://limur0.github.io/2025/11/11/ret2syscall/index.html">
+<meta property="og:site_name" content="欢迎来到我的知识分享平台 OvO">
+<meta property="og:description" content="tip:文章参考了多方资料，仅供自己学习 前置知识一. 操作系统知识操作系统将CPU分为：   用户态：运行普通程序，权限受限内核态：运行操作系统核心代码，有最高权限    其中：  用户态程序可以通过系统调用（syscall）向操作系统请求内核服务接口。（常见的 read 系统调用–用于从文件中读取数据， write 系统调用–用于向文件或标准输出写入数据。）     系统调用的流程：1.用户程">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="http://limur0.github.io/img/limuru.png">
+<meta property="article:published_time" content="2025-11-11T05:40:37.000Z">
+<meta property="article:modified_time" content="2025-11-11T07:59:23.290Z">
+<meta property="article:author" content="LimuR0">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://limur0.github.io/img/limuru.png"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "ret2syscall",
+  "url": "http://limur0.github.io/2025/11/11/ret2syscall/",
+  "image": "http://limur0.github.io/img/limuru.png",
+  "datePublished": "2025-11-11T05:40:37.000Z",
+  "dateModified": "2025-11-11T07:59:23.290Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "LimuR0",
+      "url": "http://limur0.github.io/"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/favicon.png"><link rel="canonical" href="http://limur0.github.io/2025/11/11/ret2syscall/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        if (!ttl) return
+        const expiry = Date.now() + ttl * 86400000
+        localStorage.setItem(key, JSON.stringify({ value, expiry }))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return undefined
+        const { value, expiry } = JSON.parse(itemStr)
+        if (Date.now() > expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return value
+      }
+    }
+
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        Object.entries(attr).forEach(([key, val]) => script.setAttribute(key, val))
+        script.onload = script.onreadystatechange = () => {
+          if (!script.readyState || /loaded|complete/.test(script.readyState)) resolve()
+        }
+        script.onerror = reject
+        document.head.appendChild(script)
+      }),
+      getCSS: (url, id) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onload = link.onreadystatechange = () => {
+          if (!link.readyState || /loaded|complete/.test(link.readyState)) resolve()
+        }
+        link.onerror = reject
+        document.head.appendChild(link)
+      }),
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false,"highlightFullpage":false,"highlightMacStyle":false},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: 'ret2syscall',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><meta name="generator" content="Hexo 7.3.0"></head><body><div id="web_bg" style="background-image: url(/image/quan.jpg);"></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/image/cover.jpg);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">欢迎来到我的知识分享平台 OvO</span></a><a class="nav-page-title" href="/"><span class="site-name">ret2syscall</span></a></span><div id="menus"></div></nav><div id="post-info"><h1 class="post-title">ret2syscall</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2025-11-11T05:40:37.000Z" title="发表于 2025-11-11 13:40:37">2025-11-11</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2025-11-11T07:59:23.290Z" title="更新于 2025-11-11 15:59:23">2025-11-11</time></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><p>tip:文章参考了多方资料，仅供自己学习</p>
+<h1 id="前置知识"><a href="#前置知识" class="headerlink" title="前置知识"></a>前置知识</h1><h2 id="一-操作系统知识"><a href="#一-操作系统知识" class="headerlink" title="一. 操作系统知识"></a>一. 操作系统知识</h2><p>操作系统将CPU分为： </p>
+<blockquote>
+<p>用户态：运行普通程序，权限受限<br>内核态：运行操作系统核心代码，有最高权限  </p>
+</blockquote>
+<p>其中：</p>
+<blockquote>
+<p>用户态程序可以通过系统调用（syscall）向操作系统请求内核服务接口。<br>（常见的 read 系统调用–用于从文件中读取数据， write 系统调用–用于向文件或标准输出写入数据。）   </p>
+<blockquote>
+<h4 id="系统调用的流程："><a href="#系统调用的流程：" class="headerlink" title="系统调用的流程："></a>系统调用的流程：</h4><p>1.用户程序触发系统调用（系统调用门实现用户态切换）<br>&ensp;&ensp;32位：int 0x80<br>&ensp;&ensp;64位：syscall<br>2.进入内核态，通过寄存器传参，内核根据寄存器内容识别执行哪个系统调用<br>&ensp;&ensp;eg.系统调用函数execve（”&#x2F;bin&#x2F;sh”,NULL,NULL)<br>&ensp;&ensp;&ensp;&ensp;32位：eax—-系统调用号11&#x2F;0xb<br>&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;ebx—-filename指针—指向”&#x2F;bin&#x2F;sh”<br>&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;ecx—-argv指针—-&#x3D;0<br>&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;edx—-envp指针—-&#x3D;0<br>&ensp;&ensp;&ensp;&ensp;64位：rax—-系统调用号59&#x2F;0x3B<br>&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;rdi—-filename指针—指向”&#x2F;bin&#x2F;sh”<br>&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;rsi—-argv指针<br>&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;rdx—-envp指针<br>&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;r10,r8,r9…<br>&ensp;&ensp;&ensp;&ensp;&ensp;&ensp;(顺序是从左往右读参数）<br>3.内核处理请求:用新程序镜像替换当前进程地址空间<br>4.返回结果，内存将返回结果存回寄存器<br>&ensp;&ensp;32位：eax<br>&ensp;&ensp;64位：rax   </p>
+</blockquote>
+</blockquote>
+<p>二. 常见系统调用号</p>
+<table>
+<thead>
+<tr>
+<th>Syscall</th>
+<th>x86 (32-bit)</th>
+<th>x86_64 (64-bit)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>read</td>
+<td>3</td>
+<td>0</td>
+</tr>
+<tr>
+<td>write</td>
+<td>4</td>
+<td>1</td>
+</tr>
+<tr>
+<td>open</td>
+<td>5</td>
+<td>2</td>
+</tr>
+<tr>
+<td>close</td>
+<td>6</td>
+<td>3</td>
+</tr>
+<tr>
+<td>stat</td>
+<td>106</td>
+<td>4</td>
+</tr>
+<tr>
+<td>fstat</td>
+<td>108</td>
+<td>5</td>
+</tr>
+<tr>
+<td>lstat</td>
+<td>107</td>
+<td>6</td>
+</tr>
+<tr>
+<td>poll</td>
+<td>168</td>
+<td>7</td>
+</tr>
+<tr>
+<td>lseek</td>
+<td>19</td>
+<td>8</td>
+</tr>
+<tr>
+<td>mmap</td>
+<td>90</td>
+<td>9</td>
+</tr>
+<tr>
+<td>mprotect</td>
+<td>125</td>
+<td>10</td>
+</tr>
+<tr>
+<td>munmap</td>
+<td>91</td>
+<td>11</td>
+</tr>
+<tr>
+<td>brk</td>
+<td>45</td>
+<td>12</td>
+</tr>
+<tr>
+<td>rt_sigaction</td>
+<td>174</td>
+<td>13</td>
+</tr>
+<tr>
+<td>rt_sigprocmask</td>
+<td>175</td>
+<td>14</td>
+</tr>
+<tr>
+<td>rt_sigreturn</td>
+<td>173</td>
+<td>15</td>
+</tr>
+<tr>
+<td>ioctl</td>
+<td>54</td>
+<td>16</td>
+</tr>
+<tr>
+<td>pread64</td>
+<td>180</td>
+<td>17</td>
+</tr>
+<tr>
+<td>pwrite64</td>
+<td>181</td>
+<td>18</td>
+</tr>
+<tr>
+<td>readv</td>
+<td>145</td>
+<td>19</td>
+</tr>
+<tr>
+<td>writev</td>
+<td>146</td>
+<td>20</td>
+</tr>
+<tr>
+<td>access</td>
+<td>33</td>
+<td>21</td>
+</tr>
+<tr>
+<td>pipe</td>
+<td>42</td>
+<td>22</td>
+</tr>
+<tr>
+<td>select</td>
+<td>82</td>
+<td>23</td>
+</tr>
+<tr>
+<td>sched_yield</td>
+<td>158</td>
+<td>24</td>
+</tr>
+<tr>
+<td>mremap</td>
+<td>163</td>
+<td>25</td>
+</tr>
+<tr>
+<td>msync</td>
+<td>144</td>
+<td>26</td>
+</tr>
+<tr>
+<td>mincore</td>
+<td>243</td>
+<td>27</td>
+</tr>
+<tr>
+<td>madvise</td>
+<td>219</td>
+<td>28</td>
+</tr>
+<tr>
+<td>shmget</td>
+<td>29</td>
+<td>29</td>
+</tr>
+<tr>
+<td>shmat</td>
+<td>30</td>
+<td>30</td>
+</tr>
+<tr>
+<td>shmctl</td>
+<td>31</td>
+<td>31</td>
+</tr>
+<tr>
+<td>dup</td>
+<td>41</td>
+<td>32</td>
+</tr>
+<tr>
+<td>dup2</td>
+<td>63</td>
+<td>33</td>
+</tr>
+<tr>
+<td>pause</td>
+<td>29</td>
+<td>34</td>
+</tr>
+<tr>
+<td>nanosleep</td>
+<td>162</td>
+<td>35</td>
+</tr>
+<tr>
+<td>getitimer</td>
+<td>105</td>
+<td>36</td>
+</tr>
+<tr>
+<td>alarm</td>
+<td>27</td>
+<td>37</td>
+</tr>
+<tr>
+<td>setitimer</td>
+<td>104</td>
+<td>38</td>
+</tr>
+<tr>
+<td>getpid</td>
+<td>20</td>
+<td>39</td>
+</tr>
+<tr>
+<td>sendfile</td>
+<td>187</td>
+<td>40</td>
+</tr>
+<tr>
+<td>socket</td>
+<td>359</td>
+<td>41</td>
+</tr>
+<tr>
+<td>connect</td>
+<td>362</td>
+<td>42</td>
+</tr>
+<tr>
+<td>accept</td>
+<td>364</td>
+<td>43</td>
+</tr>
+<tr>
+<td>sendto</td>
+<td>369</td>
+<td>44</td>
+</tr>
+<tr>
+<td>recvfrom</td>
+<td>371</td>
+<td>45</td>
+</tr>
+<tr>
+<td>sendmsg</td>
+<td>370</td>
+<td>46</td>
+</tr>
+<tr>
+<td>recvmsg</td>
+<td>372</td>
+<td>47</td>
+</tr>
+<tr>
+<td>shutdown</td>
+<td>373</td>
+<td>48</td>
+</tr>
+<tr>
+<td>bind</td>
+<td>361</td>
+<td>49</td>
+</tr>
+<tr>
+<td>listen</td>
+<td>363</td>
+<td>50</td>
+</tr>
+<tr>
+<td>getsockname</td>
+<td>367</td>
+<td>51</td>
+</tr>
+<tr>
+<td>getpeername</td>
+<td>368</td>
+<td>52</td>
+</tr>
+<tr>
+<td>socketpair</td>
+<td>360</td>
+<td>53</td>
+</tr>
+<tr>
+<td>setsockopt</td>
+<td>366</td>
+<td>54</td>
+</tr>
+<tr>
+<td>getsockopt</td>
+<td>365</td>
+<td>55</td>
+</tr>
+<tr>
+<td>clone</td>
+<td>120</td>
+<td>56</td>
+</tr>
+<tr>
+<td>fork</td>
+<td>2</td>
+<td>57</td>
+</tr>
+<tr>
+<td>vfork</td>
+<td>190</td>
+<td>58</td>
+</tr>
+<tr>
+<td>execve</td>
+<td>11</td>
+<td>59</td>
+</tr>
+<tr>
+<td>exit</td>
+<td>1</td>
+<td>60</td>
+</tr>
+<tr>
+<td>wait4</td>
+<td>114</td>
+<td>61</td>
+</tr>
+<tr>
+<td>kill</td>
+<td>37</td>
+<td>62</td>
+</tr>
+<tr>
+<td>uname</td>
+<td>122</td>
+<td>63</td>
+</tr>
+<tr>
+<td>semget</td>
+<td>66</td>
+<td>64</td>
+</tr>
+<tr>
+<td>semop</td>
+<td>67</td>
+<td>65</td>
+</tr>
+<tr>
+<td>semctl</td>
+<td>68</td>
+<td>66</td>
+</tr>
+<tr>
+<td>shmdt</td>
+<td>67</td>
+<td>67</td>
+</tr>
+<tr>
+<td>msgget</td>
+<td>68</td>
+<td>68</td>
+</tr>
+<tr>
+<td>msgsnd</td>
+<td>69</td>
+<td>69</td>
+</tr>
+<tr>
+<td>msgrcv</td>
+<td>70</td>
+<td>70</td>
+</tr>
+<tr>
+<td>msgctl</td>
+<td>71</td>
+<td>71</td>
+</tr>
+<tr>
+<td>fcntl</td>
+<td>55</td>
+<td>72</td>
+</tr>
+<tr>
+<td>flock</td>
+<td>143</td>
+<td>73</td>
+</tr>
+<tr>
+<td>fsync</td>
+<td>118</td>
+<td>74</td>
+</tr>
+<tr>
+<td>fdatasync</td>
+<td>148</td>
+<td>75</td>
+</tr>
+<tr>
+<td>truncate</td>
+<td>92</td>
+<td>76</td>
+</tr>
+<tr>
+<td>ftruncate</td>
+<td>93</td>
+<td>77</td>
+</tr>
+<tr>
+<td>getdents</td>
+<td>141</td>
+<td>78</td>
+</tr>
+<tr>
+<td>getcwd</td>
+<td>183</td>
+<td>79</td>
+</tr>
+</tbody></table>
+<p>三. 汇编知识</p>
+<ol>
+<li>pop xxx（可以是register） –将栈顶的数据弹出，并存入xxx中</li>
+</ol>
+<p>四. X86_64 syscall的传参规则<br>x86-64架构寄存器如下：  </p>
+<table>
+<thead>
+<tr>
+<th>register</th>
+<th>description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>rdi</td>
+<td>传递第1个参数</td>
+</tr>
+<tr>
+<td>rsi</td>
+<td>传递第2个参数</td>
+</tr>
+<tr>
+<td>rdx</td>
+<td>传递第3个参数</td>
+</tr>
+<tr>
+<td>r10</td>
+<td>传递第4个参数</td>
+</tr>
+<tr>
+<td>r8</td>
+<td>传递第5个参数</td>
+</tr>
+<tr>
+<td>r9</td>
+<td>传递第6个参数</td>
+</tr>
+<tr>
+<td>rax</td>
+<td>系统调用号和返回值</td>
+</tr>
+</tbody></table>
+<h1 id="ret2syscall"><a href="#ret2syscall" class="headerlink" title="ret2syscall"></a>ret2syscall</h1><h2 id="利用前提"><a href="#利用前提" class="headerlink" title="利用前提"></a>利用前提</h2><p>(不用照本宣科，自己多做题积累判断)<br>1.程序中不存在system(“&#x2F;bin&#x2F;sh”)的代码段<br>2.不存在合适的可执行段进行恶意代码的执行<br>3.但是程序是静态链接<br>4.程序中中存在可用gadget，拼接可组成系统调用    </p>
+<h2 id="原理"><a href="#原理" class="headerlink" title="原理"></a>原理</h2><p>利用了<strong>函数调用和返回机制</strong>以及<strong>系统调用</strong>的原理，通过ROP控制程序执行系统调用，获取 shell。    </p>
+<blockquote>
+<p>tip:<br>1.函数调用原理简述如下，详细知识见博客其他内容：</p>
+<blockquote>
+<p>a.程序执行函数调用时，函数的参数通常通过栈传递，函数返回地址也被压入栈中。<br>b.在函数执行完毕后，会通过 ret 指令将栈顶的返回地址弹出并跳转到该地址继续执行。<br>2.我们通过控制函数的返回地址，来劫持程序的执行流，然后布置系统调用所需要的参数和系统调用号，来实现系统调用</p>
+</blockquote>
+</blockquote>
+<h2 id="基本操作"><a href="#基本操作" class="headerlink" title="基本操作"></a>基本操作</h2><h3 id="how"><a href="#how" class="headerlink" title="how"></a>how</h3><p>1.在栈溢出漏洞点填充数据至ret_address<br>2.寻找程序中的可用的汇编语句，拼接成最终系统调用的语句</p>
+<blockquote>
+<p>tip:<br>1.问：如何寻找汇编语句？<br>  &ensp;&ensp;答：利用ROPgadget  </p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">ROPgadget --binary filename --only &#x27;pop|ret&#x27;</span><br><span class="line">(只显示以 ​pop​ 开头并以 ​ret​ 结尾的 gadgets,即寄存器操作+返回.)</span><br><span class="line"></span><br><span class="line">ROPgadget --binary filename |grep &#x27;pop rax&#x27;</span><br><span class="line">(过滤出包含 ​eax​ 寄存器的 gadgets，常用于系统调用号设置。)</span><br><span class="line"></span><br><span class="line">(ROPgadget --binary filename:分析二进制文件，提取所有可用的 gadgets。)</span><br></pre></td></tr></table></figure>
+<p>2.问：gadget是什么?<br>  &ensp; 答：可复用的机器指令序列，通常以 ret（或 jmp 等）结尾.利用这些短小的指令序列，可以在不注入代码的情况下，通过控制栈（返回地址）把寄存器&#x2F;内存设置成想要的值，从而实现“返回导向编程（ROP）”。<br>3.问：为什么gadget后面都是以ret结尾的？<br>  &ensp; 答：因为需要将各个代码片段连起来才能构成最终的系统调用，而这个“相连”实际上是程序流顺次执行这些语句，只需要每句后面都存在ret，逻辑上这些汇编语句就是相连的。</p>
+</blockquote>
+<h3 id="eg-32位"><a href="#eg-32位" class="headerlink" title="eg.32位"></a>eg.32位</h3><p>1、修改eax的值为0xb</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ROPgadget --binary rop | grep &#x27;pop eax&#x27;</span><br></pre></td></tr></table></figure>
+<p>2、修改ebx的值为bin_sh_address</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ROPgadget --binary rop  --string &#x27;/bin/sh&#x27;</span><br></pre></td></tr></table></figure>
+<p>3、修改ecx的值为0<br>4、修改edx的值为0<br>5、压入int 0x80</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ROPgadget --binary filename --only int</span><br></pre></td></tr></table></figure>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="http://limur0.github.io">LimuR0</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="http://limur0.github.io/2025/11/11/ret2syscall/">http://limur0.github.io/2025/11/11/ret2syscall/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来源 <a href="http://limur0.github.io" target="_blank">欢迎来到我的知识分享平台 OvO</a>！</span></div></div><div class="tag_share"><div class="post-share"><div class="social-share" data-image="/img/limuru.png" data-sites="facebook,twitter,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related" href="/2025/11/05/House%20of%20Force/" title="House of Force"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info"><div class="info-1"><div class="info-item-1">上一篇</div><div class="info-item-2">House of Force</div></div><div class="info-2"><div class="info-item-1">House of Force原理Glibc的很多版本中（2.23和2.27），并没有对Top Chunk的Size字段进行完整性检查. 利用1.先通过溢出到top chunk的size字段，伪造top chunk的大小。2.然后malloc申请堆块并写入数据，实现任意地址任意写 详述 tip:1.详述示例参考hacking everyday2.用抽象的思维看此示例，不用过度纠结细节，着重看如何实现House of Heap  分析程序1.程序运行前输出了puts地址和heap开始的地址2.给出菜单3.选择malloc,申请一个0x18大小的堆块（实际上分配了0x20大小）在pwndbg里，用vis命令查看现在的堆可以看到由于溢出了7个字节的b和1个字节的\x0a,可以覆盖top chunk的size4.选择第二个选项,会输出变量target的值x&#x2F;gx &amp;target指令(或者dp...</div></div></div></a><a class="pagination-related  no-desc" href="/2025/11/11/%E5%87%BD%E6%95%B0%E8%B0%83%E7%94%A8/" title="函数调用"><div class="cover" style="background: var(--default-bg-color)"></div><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">函数调用</div></div></div></a></nav><hr class="custom-hr"/><div id="post-comment"><div class="comment-head"><div class="comment-headline"><i class="fas fa-comments fa-fw"></i><span> 评论</span></div></div><div class="comment-wrap"><div><div id="twikoo-wrap"></div></div></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/limuru.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">LimuR0</div><div class="author-info-description"></div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">12</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">1</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">0</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/LimuR0"><i class="fab fa-github"></i><span>灌注一下喵QAQ</span></a></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">此博客由 <a target="_blank" rel="noopener" href="https://github.com/LimuR0">LimuR0</a> 搭建 文章由 <a target="_blank" rel="noopener" href="https://github.com/LimuR0">LimuR0(Pwn手)</a>和Hell(Misc手)共同撰写 如有错误之处请直接在文章下评论 会及时改正</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#%E5%89%8D%E7%BD%AE%E7%9F%A5%E8%AF%86"><span class="toc-number">1.</span> <span class="toc-text">前置知识</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%80-%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E7%9F%A5%E8%AF%86"><span class="toc-number">1.1.</span> <span class="toc-text">一. 操作系统知识</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#%E7%B3%BB%E7%BB%9F%E8%B0%83%E7%94%A8%E7%9A%84%E6%B5%81%E7%A8%8B%EF%BC%9A"><span class="toc-number">1.1.0.1.</span> <span class="toc-text">系统调用的流程：</span></a></li></ol></li></ol></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link" href="#ret2syscall"><span class="toc-number">2.</span> <span class="toc-text">ret2syscall</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%88%A9%E7%94%A8%E5%89%8D%E6%8F%90"><span class="toc-number">2.1.</span> <span class="toc-text">利用前提</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%8E%9F%E7%90%86"><span class="toc-number">2.2.</span> <span class="toc-text">原理</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%9F%BA%E6%9C%AC%E6%93%8D%E4%BD%9C"><span class="toc-number">2.3.</span> <span class="toc-text">基本操作</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#how"><span class="toc-number">2.3.1.</span> <span class="toc-text">how</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#eg-32%E4%BD%8D"><span class="toc-number">2.3.2.</span> <span class="toc-text">eg.32位</span></a></li></ol></li></ol></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2025/11/11/2025NSSCTF%E7%A7%8B%E5%AD%A3%E6%8B%9B%E6%96%B0%E8%B5%9Bwp-pwn/" title="2025NSSCTF秋季招新赛wp_pwn">2025NSSCTF秋季招新赛wp_pwn</a><time datetime="2025-11-11T08:26:56.000Z" title="发表于 2025-11-11 16:26:56">2025-11-11</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2025/11/11/ret2libc/" title="ret2libc">ret2libc</a><time datetime="2025-11-11T08:05:31.000Z" title="发表于 2025-11-11 16:05:31">2025-11-11</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2025/11/11/%E5%87%BD%E6%95%B0%E8%B0%83%E7%94%A8/" title="函数调用">函数调用</a><time datetime="2025-11-11T08:01:44.000Z" title="发表于 2025-11-11 16:01:44">2025-11-11</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2025/11/11/ret2syscall/" title="ret2syscall">ret2syscall</a><time datetime="2025-11-11T05:40:37.000Z" title="发表于 2025-11-11 13:40:37">2025-11-11</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2025/11/05/%E6%96%B0%E5%8D%9A%E5%AE%A2/" title="House of Force">House of Force</a><time datetime="2025-11-05T10:13:56.000Z" title="发表于 2025-11-05 18:13:56">2025-11-05</time></div></div></div></div></div></div></main><footer id="footer"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;2025 By LimuR0</span><span class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo 7.3.0</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly 5.4.0-b1</a></span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><a id="to_comment" href="#post-comment" title="前往评论"><i class="fas fa-comments"></i></a><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js"></script><script src="/js/main.js"></script><div class="js-pjax"><script>(() => {
+  const isShuoshuo = GLOBAL_CONFIG_SITE.pageType === 'shuoshuo'
+  const option = null
+
+  const getCount = () => {
+    const countELement = document.getElementById('twikoo-count')
+    if(!countELement) return
+    twikoo.getCommentsCount({
+      envId: 'https://fabulous-faloodeh-843577.netlify.app/.netlify/functions/twikoo',
+      region: 'ap-east-1',
+      urls: [window.location.pathname],
+      includeReply: false
+    }).then(res => {
+      countELement.textContent = res[0].count
+    }).catch(err => {
+      console.error(err)
+    })
+  }
+
+  const init = (el = document, path = location.pathname) => {
+    twikoo.init({
+      el: el.querySelector('#twikoo-wrap'),
+      envId: 'https://fabulous-faloodeh-843577.netlify.app/.netlify/functions/twikoo',
+      region: 'ap-east-1',
+      onCommentLoaded: () => {
+        btf.loadLightbox(document.querySelectorAll('#twikoo .tk-content img:not(.tk-owo-emotion)'))
+      },
+      ...option,
+      path: isShuoshuo ? path : (option && option.path) || path
+    })
+
+    GLOBAL_CONFIG_SITE.pageType === 'post' && getCount()
+
+    isShuoshuo && (window.shuoshuoComment.destroyTwikoo = () => {
+      if (el.children.length) {
+        el.innerHTML = ''
+        el.classList.add('no-comment')
+      }
+    })
+  }
+
+  const loadTwikoo = (el, path) => {
+    if (typeof twikoo === 'object') setTimeout(() => init(el, path), 0)
+    else btf.getScript('https://cdn.jsdelivr.net/npm/twikoo/dist/twikoo.all.min.js').then(() => init(el, path))
+  }
+
+  if (isShuoshuo) {
+    'Twikoo' === 'Twikoo'
+      ? window.shuoshuoComment = { loadComment: loadTwikoo }
+      : window.loadOtherComment = loadTwikoo
+    return
+  }
+
+  if ('Twikoo' === 'Twikoo' || !true) {
+    if (true) btf.loadComment(document.getElementById('twikoo-wrap'), loadTwikoo)
+    else loadTwikoo()
+  } else {
+    window.loadOtherComment = loadTwikoo
+  }
+})()</script></div><script id="click-show-text" src="https://cdn.jsdelivr.net/npm/butterfly-extsrc/dist/click-show-text.min.js" data-mobile="true" data-text="富强,民主,文明,和谐,自由,平等,公正,法治,爱国,敬业,诚信,友善" data-fontsize="20px" data-random="false" async="async"></script><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>
